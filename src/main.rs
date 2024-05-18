@@ -62,7 +62,7 @@ fn main() {
                 println!("accepted new connection");
                 let response =
                     HttpResponse::new(HttpVersion::Http1_1, HttpStatus::Ok, "".to_string());
-                stream.write(response.to_string().as_bytes()).unwrap();
+                stream.write_all(response.to_string().as_bytes()).unwrap();
             }
             Err(e) => {
                 println!("error: {}", e);
