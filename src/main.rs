@@ -16,6 +16,7 @@ impl std::fmt::Display for HttpError {
 }
 impl std::error::Error for HttpError {}
 
+#[derive(Clone)]
 enum HttpVersion {
     Http1_0,
     Http1_1,
@@ -65,19 +66,40 @@ impl HttpResponseStatusLine {
 
 struct HttpResponse {
     status_line: HttpResponseStatusLine,
+    headers: Vec<(String, String)>,
     content: String,
 }
 
 impl HttpResponse {
-    fn new(version: HttpVersion, status: HttpStatus, content: String) -> Self {
+    fn new(version: HttpVersion) -> Self {
         Self {
-            status_line: HttpResponseStatusLine::new(version, status),
-            content,
+            status_line: HttpResponseStatusLine::new(version, HttpStatus::Ok),
+            content: "".to_owned(),
+            headers: Vec::new(),
         }
+    }
+
+    fn add_header(&mut self, header_name: String, header_value: String) -> &mut Self {
+        self.headers.push((header_name, header_value));
+        self
+    }
+
+    fn set_status(&mut self, status: HttpStatus) -> &mut Self {
+        self.status_line.status = status;
+        self
+    }
+
+    fn add_content(&mut self, content: String) -> &mut Self {
+        self.content = content;
+        self
     }
 
     fn to_string(&self) -> String {
         let mut response = self.status_line.to_string() + "\r\n";
+
+        for (name, value) in &self.headers {
+            response += &format!("{name}: {value}\r\n",)
+        }
 
         response += "\r\n";
         response += &self.content;
@@ -203,11 +225,10 @@ fn main() {
                 let mut buf = BufReader::new(&stream);
                 let request =
                     HttpRequest::from_stream(&mut buf).expect("Failed to parse the request.");
-                let status: HttpStatus = match &request.request_line.target[..] {
-                    "/" => HttpStatus::Ok,
-                    _ => HttpStatus::NotFound,
-                };
-                let response = HttpResponse::new(HttpVersion::Http1_1, status, "".to_string());
+
+                let response = HttpResponse::new(request.request_line.version.clone());
+                let response = handle_request(request, response);
+
                 stream.write_all(response.to_string().as_bytes()).unwrap();
             }
             Err(e) => {
@@ -215,4 +236,22 @@ fn main() {
             }
         }
     }
+}
+
+fn handle_request(request: HttpRequest, mut response: HttpResponse) -> HttpResponse {
+    let target = &request.request_line.target[..];
+    match target {
+        "/" => {}
+        target if target.starts_with("/echo/") => {
+            let message = target.trim_start_matches("/echo/");
+            response
+                .add_header("Content-Type".to_string(), "text/plain".to_string())
+                .add_header("Content-Length".to_string(), message.len().to_string())
+                .add_content(message.to_string());
+        }
+        _ => {
+            response.set_status(HttpStatus::NotFound);
+        }
+    }
+    response
 }
