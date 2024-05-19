@@ -1,5 +1,6 @@
 use std::io::{BufReader, Error, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::thread;
 
 #[derive(std::fmt::Debug)]
 enum HttpError {
@@ -234,22 +235,27 @@ fn main() {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
-                println!("accepted new connection");
-                let mut buf = BufReader::new(&stream);
-                let request =
-                    HttpRequest::from_stream(&mut buf).expect("Failed to parse the request.");
-
-                let response = HttpResponse::new(request.request_line.version.clone());
-                let response = handle_request(request, response);
-
-                stream.write_all(response.to_string().as_bytes()).unwrap();
+            Ok(stream) => {
+                thread::spawn(|| {
+                    handle_connection(stream);
+                });
             }
             Err(e) => {
                 println!("error: {}", e);
             }
         }
     }
+}
+fn handle_connection(mut stream: TcpStream) {
+    println!("accepted new connection");
+    let mut buffered_stream = BufReader::new(&stream);
+    let request =
+        HttpRequest::from_stream(&mut buffered_stream).expect("Failed to parse the request.");
+
+    let response = HttpResponse::new(request.request_line.version.clone());
+    let response = handle_request(request, response);
+
+    stream.write_all(response.to_string().as_bytes()).unwrap();
 }
 
 fn handle_request(request: HttpRequest, mut response: HttpResponse) -> HttpResponse {
