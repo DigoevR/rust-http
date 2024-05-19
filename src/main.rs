@@ -79,8 +79,9 @@ impl HttpResponse {
         }
     }
 
-    fn add_header(&mut self, header_name: String, header_value: String) -> &mut Self {
-        self.headers.push((header_name, header_value));
+    fn add_header(&mut self, header_name: &str, header_value: &str) -> &mut Self {
+        self.headers
+            .push((header_name.to_string(), header_value.to_string()));
         self
     }
 
@@ -89,9 +90,15 @@ impl HttpResponse {
         self
     }
 
-    fn add_content(&mut self, content: String) -> &mut Self {
-        self.content = content;
+    fn add_content(&mut self, content: &str) -> &mut Self {
+        self.content = content.to_string();
         self
+    }
+
+    fn write_text(&mut self, text: &str) -> &mut Self {
+        self.add_header("Content-Type", "text/plain")
+            .add_header("Content-Length", &text.len().to_string())
+            .add_content(text)
     }
 
     fn to_string(&self) -> String {
@@ -213,6 +220,13 @@ impl HttpRequest {
             body: None,
         })
     }
+
+    fn get_header(&self, header_name: &str) -> Option<&String> {
+        self.headers
+            .iter()
+            .find(|(name, _)| header_name == name)
+            .and_then(|(_, value)| Some(value))
+    }
 }
 
 fn main() {
@@ -242,12 +256,11 @@ fn handle_request(request: HttpRequest, mut response: HttpResponse) -> HttpRespo
     let target = &request.request_line.target[..];
     match target {
         "/" => {}
+        "/user-agent" => {
+            response.write_text(request.get_header("User-Agent").unwrap());
+        }
         target if target.starts_with("/echo/") => {
-            let message = target.trim_start_matches("/echo/");
-            response
-                .add_header("Content-Type".to_string(), "text/plain".to_string())
-                .add_header("Content-Length".to_string(), message.len().to_string())
-                .add_content(message.to_string());
+            response.write_text(target.trim_start_matches("/echo/"));
         }
         _ => {
             response.set_status(HttpStatus::NotFound);
